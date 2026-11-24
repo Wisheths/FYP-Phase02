@@ -61,16 +61,18 @@ export async function initStorage() {
 }
 
 function getEquipment() {
-  return equipmentCache;
+  return equipmentCache.map(item => ({ ...item }));
 }
 
 async function saveEquipment(updatedList) {
   const oldIds = new Set(equipmentCache.map(item => item.id));
   const newIds = new Set(updatedList.map(item => item.id));
-  equipmentCache = [...updatedList];
+  equipmentCache = updatedList
+    .map(item => ({ ...item }))
+    .sort((a, b) => a.id.localeCompare(b.id));
 
   try {
-    for (const item of updatedList) {
+    for (const item of equipmentCache) {
       await setDoc(doc(db, "equipment", item.id), item);
     }
     for (const oldId of oldIds) {
@@ -84,14 +86,24 @@ async function saveEquipment(updatedList) {
 }
 
 function getMaintenanceLogs() {
-  return maintenanceCache;
+  return maintenanceCache.map(log => ({ ...log }));
 }
 
 async function saveMaintenanceLogs(updatedLogs) {
-  maintenanceCache = [...updatedLogs];
+  const oldIds = new Set(maintenanceCache.map(log => log.id));
+  const newIds = new Set(updatedLogs.map(log => log.id));
+  maintenanceCache = updatedLogs
+    .map(log => ({ ...log }))
+    .sort((a, b) => b.id.localeCompare(a.id));
+
   try {
-    for (const log of updatedLogs) {
+    for (const log of maintenanceCache) {
       await setDoc(doc(db, "maintenance_logs", log.id), log);
+    }
+    for (const oldId of oldIds) {
+      if (!newIds.has(oldId)) {
+        await deleteDoc(doc(db, "maintenance_logs", oldId));
+      }
     }
   } catch (err) {
     console.error("Ralat menyimpan rekod penyelenggaraan:", err);
