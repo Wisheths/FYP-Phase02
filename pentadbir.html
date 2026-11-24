@@ -9,18 +9,16 @@
 <body>
 
   <aside class="sidebar" id="sidebar">
-    <div class="brand">
-      <div class="brand-left">
-        <div class="brand-icon">SK</div>
-        <div class="brand-text">
-          <h2>Makmal SKR 2</h2>
-          <p>Panel Pentadbir</p>
-        </div>
-      </div>
-      <button class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Kecilkan / Buka Sidebar">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
-      </button>
+ <div class="brand">
+  <div class="brand-left">
+    <div class="brand-icon" onclick="toggleSidebar()" title="Kecilkan / Buka Sidebar">SK</div>
+    <div class="brand-text">
+      <h2>Makmal SKR 2</h2>
+      <p>Panel Pentadbir</p>
     </div>
+  </div>
+
+</div>
 
     <nav class="sidebar-nav">
       <a class="nav-link active" href="#dashboard" onclick="showSection('dashboard', this, event)">
@@ -56,14 +54,6 @@
   </aside>
 
   <main class="main-content">
-    <header class="page-header">
-      <div>
-        <p class="eyebrow">PENTADBIR SISTEM · MAKMAL SKR 2</p>
-        <h1 id="pageTitle">Papan Pemuka</h1>
-        <p class="subtitle" id="pageSubtitle">Ringkasan keadaan komputer dan status sistem di Makmal SKR 2.</p>
-      </div>
-    </header>
-
     <!-- DASHBOARD -->
     <section id="dashboard" class="content-section active-section">
       <div class="stats-grid">
