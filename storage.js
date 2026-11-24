@@ -1,80 +1,55 @@
 /* ==========================================================
-   DATA PERSISTENCE & STORAGE MODULE (storage.js)
-   LocalStorage management for Equipment & Maintenance logs
+   LOCAL STORAGE MODULE (storage.js)
    ========================================================== */
 
-const STORAGE_KEYS = {
-  EQUIPMENT: 'skr2_equipment_data',
-  MAINTENANCE: 'skr2_maintenance_data'
-};
+const EQUIPMENT_STORAGE_KEY = 'skr2_equipment_data';
+const MAINTENANCE_STORAGE_KEY = 'skr2_maintenance_logs';
 
 const DEFAULT_EQUIPMENT = [
-  { id: 'PC-SKR2-001', model: 'Dell OptiPlex 7090', serial: 'DL-10041', location: 'Meja 01', condition: 'Baik', status: 'Aktif' },
-  { id: 'PC-SKR2-002', model: 'Dell OptiPlex 7090', serial: 'DL-10042', location: 'Meja 02', condition: 'Perlu diperiksa', status: 'Perlu perhatian' },
-  { id: 'PC-SKR2-003', model: 'HP ProDesk 400', serial: 'HP-88301', location: 'Meja 03', condition: 'Rosak', status: 'Penyelenggaraan' },
-  { id: 'PC-SKR2-004', model: 'Acer Veriton X', serial: 'AC-99212', location: 'Meja 04', condition: 'Baik', status: 'Aktif' }
+  { id: 'PC-001', model: 'Dell OptiPlex 3080', serial: 'DL-3080-001', location: 'Baris A - Meja 1', condition: 'Baik', status: 'Aktif' },
+  { id: 'PC-002', model: 'Dell OptiPlex 3080', serial: 'DL-3080-002', location: 'Baris A - Meja 2', condition: 'Perlu diperiksa', status: 'Perlu perhatian' },
+  { id: 'PC-003', model: 'HP ProDesk 400 G7', serial: 'HP-400G7-003', location: 'Baris A - Meja 3', condition: 'Baik', status: 'Aktif' },
+  { id: 'PC-004', model: 'HP ProDesk 400 G7', serial: 'HP-400G7-004', location: 'Baris B - Meja 1', condition: 'Rosak', status: 'Penyelenggaraan' },
+  { id: 'PC-005', model: 'Lenovo ThinkCentre M70', serial: 'LN-M70-005', location: 'Baris B - Meja 2', condition: 'Baik', status: 'Aktif' },
+  { id: 'PC-006', model: 'Lenovo ThinkCentre M70', serial: 'LN-M70-006', location: 'Baris B - Meja 3', condition: 'Baik', status: 'Aktif' }
 ];
 
-const DEFAULT_MAINTENANCE = [
-  { id: 'MNT-2026-001', equipmentId: 'PC-SKR2-003', type: 'Pembaikan (Corrective)', date: '2026-10-12', notes: 'Tukar Power Supply Unit (PSU)', status: 'Dalam Proses' },
-  { id: 'MNT-2026-002', equipmentId: 'PC-SKR2-002', type: 'Pemeriksaan Rutin', date: '2026-10-18', notes: 'Kipas CPU bising, perlu pembersihan habuk', status: 'Belum Selesai' }
+const DEFAULT_MAINTENANCE_LOGS = [
+  { id: 'MNT-001', pcId: 'PC-004', type: 'Pembaikan (Corrective)', date: '2026-11-10', notes: 'Unit tidak dapat dihidupkan. Penggantian PSU sedang dijalankan.', status: 'Dalam Proses' },
+  { id: 'MNT-002', pcId: 'PC-002', type: 'Pemeriksaan Rutin', date: '2026-11-18', notes: 'Suhu CPU tinggi semasa penggunaan perisian berat. Perlu tukar thermal paste.', status: 'Belum Selesai' },
+  { id: 'MNT-003', pcId: 'PC-001', type: 'Pencegahan (Preventive)', date: '2026-10-25', notes: 'Pembersihan habuk dalaman dan kemaskini Windows selesai.', status: 'Selesai' }
 ];
 
-function getEquipmentData() {
+function getEquipment() {
   try {
-    const data = localStorage.getItem(STORAGE_KEYS.EQUIPMENT);
-    return data ? JSON.parse(data) : DEFAULT_EQUIPMENT;
+    const data = localStorage.getItem(EQUIPMENT_STORAGE_KEY);
+    if (!data) {
+      saveEquipment(DEFAULT_EQUIPMENT);
+      return DEFAULT_EQUIPMENT;
+    }
+    return JSON.parse(data);
   } catch (e) {
     return DEFAULT_EQUIPMENT;
   }
 }
 
-function saveEquipmentData(list) {
+function saveEquipment(equipment) {
+  localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(equipment));
+}
+
+function getMaintenanceLogs() {
   try {
-    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(list));
+    const data = localStorage.getItem(MAINTENANCE_STORAGE_KEY);
+    if (!data) {
+      saveMaintenanceLogs(DEFAULT_MAINTENANCE_LOGS);
+      return DEFAULT_MAINTENANCE_LOGS;
+    }
+    return JSON.parse(data);
   } catch (e) {
-    console.error("Gagal menyimpan data peralatan:", e);
+    return DEFAULT_MAINTENANCE_LOGS;
   }
 }
 
-function addOrUpdateEquipment(item, editIndex = -1) {
-  const list = getEquipmentData();
-  if (editIndex >= 0 && editIndex < list.length) {
-    list[editIndex] = item;
-  } else {
-    list.push(item);
-  }
-  saveEquipmentData(list);
-  return list;
-}
-
-function deleteEquipmentById(id) {
-  let list = getEquipmentData();
-  list = list.filter(item => item.id !== id);
-  saveEquipmentData(list);
-  return list;
-}
-
-function getMaintenanceData() {
-  try {
-    const data = localStorage.getItem(STORAGE_KEYS.MAINTENANCE);
-    return data ? JSON.parse(data) : DEFAULT_MAINTENANCE;
-  } catch (e) {
-    return DEFAULT_MAINTENANCE;
-  }
-}
-
-function saveMaintenanceData(list) {
-  try {
-    localStorage.setItem(STORAGE_KEYS.MAINTENANCE, JSON.stringify(list));
-  } catch (e) {
-    console.error("Gagal menyimpan rekod penyelenggaraan:", e);
-  }
-}
-
-function addMaintenanceRecord(record) {
-  const list = getMaintenanceData();
-  list.unshift(record);
-  saveMaintenanceData(list);
-  return list;
+function saveMaintenanceLogs(logs) {
+  localStorage.setItem(MAINTENANCE_STORAGE_KEY, JSON.stringify(logs));
 }

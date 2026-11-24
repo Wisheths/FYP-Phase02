@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Penyelia Makmal · Makmal SKR 2</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-left">
+        <div class="brand-icon">SK</div>
+        <div class="brand-text">
+          <h2>Makmal SKR 2</h2>
+          <p>Panel Penyelia</p>
+        </div>
+      </div>
+      <button class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Kecilkan / Buka Sidebar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+      </button>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a class="nav-link active" href="#dashboard" onclick="showSection('dashboard', this, event)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+        <span>Papan Pemuka</span>
+      </a>
+      <a class="nav-link" href="#peralatan" onclick="showSection('peralatan', this, event)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+        <span>Peralatan</span>
+      </a>
+      <a class="nav-link" href="#penyelenggaraan" onclick="showSection('penyelenggaraan', this, event)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+        <span>Penyelenggaraan</span>
+      </a>
+      <a class="nav-link" href="#laporan" onclick="showSection('laporan', this, event)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+        <span>Laporan Rasmi</span>
+      </a>
+    </nav>
+
+    <div class="user-card">
+      <div class="avatar" id="userAvatar">S</div>
+      <div class="user-info">
+        <strong id="userName">Penyelia</strong>
+        <span class="role-badge" id="userRoleLabel">Penyelia</span>
+        <button class="logout-btn" onclick="logout()">Log Keluar</button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">PENYELIA MAKMAL · MAKMAL SKR 2</p>
+        <h1 id="pageTitle">Papan Pemuka</h1>
+        <p class="subtitle" id="pageSubtitle">Pemantauan status keseluruhan dan laporan rasmi Makmal SKR 2.</p>
+      </div>
+    </header>
+
+    <!-- DASHBOARD -->
+    <section id="dashboard" class="content-section active-section">
+      <div class="stats-grid">
+        <article class="stat-card"><p class="stat-label">Jumlah Komputer</p><strong class="stat-value" id="statTotal">0</strong><span class="stat-sub">Berdaftar</span></article>
+        <article class="stat-card"><p class="stat-label">Dalam Keadaan Baik</p><strong class="stat-value green-text" id="statBaik">0</strong><span class="stat-sub green-text">Sedia digunakan</span></article>
+        <article class="stat-card"><p class="stat-label">Perlu Perhatian</p><strong class="stat-value orange-text" id="statPerhatian">0</strong><span class="stat-sub orange-text">Perlu diperiksa</span></article>
+        <article class="stat-card"><p class="stat-label">Dalam Penyelenggaraan</p><strong class="stat-value red-text" id="statRosak">0</strong><span class="stat-sub red-text">Belum selesai</span></article>
+      </div>
+
+      <div class="chart-card">
+        <h3>Taburan Kesihatan Komputer Makmal</h3>
+        <div class="stacked-bar-container">
+          <div class="stacked-bar-label"><span>Kadar Kebolehgunaan Sistem</span><strong id="visualHealthRatio">0% Sedia Digunakan</strong></div>
+          <div class="stacked-bar-track">
+            <div id="barBaik" class="bar-segment segment-baik" style="width: 0%"></div>
+            <div id="barPerhatian" class="bar-segment segment-perhatian" style="width: 0%"></div>
+            <div id="barRosak" class="bar-segment segment-rosak" style="width: 0%"></div>
+          </div>
+        </div>
+        <div class="legend-grid">
+          <div class="legend-item"><span class="legend-color" style="background: var(--success);"></span><span>Baik (<strong id="legendBaikCount">0</strong>)</span></div>
+          <div class="legend-item"><span class="legend-color" style="background: var(--warning);"></span><span>Perlu Perhatian (<strong id="legendPerhatianCount">0</strong>)</span></div>
+          <div class="legend-item"><span class="legend-color" style="background: var(--danger);"></span><span>Penyelenggaraan (<strong id="legendRosakCount">0</strong>)</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PERALATAN (READ-ONLY) -->
+    <section id="peralatan" class="content-section">
+      <div class="panel">
+        <div class="panel-header">
+          <div><h2>Senarai Peralatan Makmal</h2></div>
+          <div class="panel-actions">
+            <input type="search" id="searchEquipment" placeholder="Cari ID, Model, Siri..." oninput="renderEquipmentTable()">
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>ID Peralatan</th><th>Jenama / Model</th><th>Nombor Siri</th><th>Lokasi</th><th>Keadaan</th><th>Status</th></tr></thead>
+            <tbody id="equipmentTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- PENYELENGGARAAN (READ-ONLY) -->
+    <section id="penyelenggaraan" class="content-section">
+      <div class="panel">
+        <div class="panel-header">
+          <div><h2>Rekod Penyelenggaraan & Pembaikan</h2></div>
+          <button class="button button-outline" onclick="window.print()">🖨️ Cetak PDF</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>ID Rekod</th><th>ID Peralatan</th><th>Jenis</th><th>Tarikh</th><th>Catatan</th><th>Status</th></tr></thead>
+            <tbody id="maintenanceTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- LAPORAN -->
+    <section id="laporan" class="content-section">
+      <div class="panel">
+        <div class="panel-header">
+          <div><h2>Laporan Status Makmal SKR 2</h2></div>
+          <button class="button button-outline" onclick="window.print()">🖨️ Cetak Laporan Rasmi</button>
+        </div>
+        <div class="report-container">
+          <div class="report-box"><h3>Kesihatan Peralatan Makmal</h3><p id="reportHealthText" class="report-text">Sistem berada dalam keadaan baik dengan nisbah kebolehgunaan tinggi.</p></div>
+          <div class="report-box">
+            <h4>Ringkasan Statistik</h4>
+            <ul class="report-stats">
+              <li><span>Jumlah PC:</span> <strong id="repTotal">0</strong></li>
+              <li><span>PC Baik:</span> <strong id="repGood">0</strong></li>
+              <li><span>PC Perlu Penyelenggaraan:</span> <strong id="repMaintenance">0</strong></li>
+              <li><span>Jumlah Rekod Log:</span> <strong id="repLogsCount">0</strong></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="site-footer">Projek Tahun Akhir (PTA) · Makmal SKR 2 · KV Alor Setar</footer>
+  </main>
+
+  <div id="toastContainer" class="toast-container"></div>
+
+ <script src="js/auth.js"></script>
+<script src="js/storage.js?v=6"></script>
+<script src="js/predictionEngine.js?v=6"></script>
+<script src="js/uiController.js?v=6"></script>
+  <script>requireAuth('Penyelia');</script>
+</body>
+</html>
