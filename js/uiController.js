@@ -131,7 +131,7 @@ function initTopbarControls() {
     let idx = 0;
 
     if (pages.length > 0) {
-      html += `<div class="command-group-label">Makmal SKR 2 — Halaman</div>`;
+      html += `<div class="command-group-label">R-CEMS — Halaman</div>`;
       pages.forEach(item => {
         html += `
           <button type="button" class="command-item ${idx === 0 ? 'selected' : ''}" data-cmd-idx="${idx}">
@@ -147,7 +147,7 @@ function initTopbarControls() {
     }
 
     if (actions.length > 0) {
-      html += `<div class="command-group-label">Makmal SKR 2 — Tindakan</div>`;
+      html += `<div class="command-group-label">R-CEMS — Tindakan</div>`;
       actions.forEach(item => {
         html += `
           <button type="button" class="command-item ${idx === 0 ? 'selected' : ''}" data-cmd-idx="${idx}">

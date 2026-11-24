@@ -1,5 +1,5 @@
 /* ==========================================================
-   SKR 2 LAB MANAGEMENT — DARK GREEN SHARP / COMPACT (style.css)
+   R-CEMS LAB MANAGEMENT — DARK GREEN SHARP / COMPACT (style.css)
    ========================================================== */
 
 :root {
@@ -109,8 +109,9 @@ body[data-role="Juruteknik"] .admin-only {
 
 .brand-text h2 {
   margin: 0;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
   color: var(--text);
 }
 
