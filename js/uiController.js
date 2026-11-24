@@ -48,6 +48,7 @@ function setElText(id, text) {
 // ==========================================================
 document.addEventListener('DOMContentLoaded', () => {
   refreshAllUI();
+  initTopbarControls();
 });
 
 function refreshAllUI() {
@@ -55,6 +56,201 @@ function refreshAllUI() {
   renderEquipmentTable();
   renderMaintenanceTable();
   populatePredictionDropdown();
+}
+
+// ==========================================================
+// TOPBAR: COMMAND PALETTE & ACCOUNT DROPDOWN
+// ==========================================================
+function initTopbarControls() {
+  const openBtn = document.getElementById('openSearchModalBtn');
+  const commandModal = document.getElementById('commandModal');
+  const commandInput = document.getElementById('commandSearchInput');
+  const commandResults = document.getElementById('commandResults');
+  const accountBtn = document.getElementById('accountBtn');
+  const accountDropdown = document.getElementById('accountDropdown');
+
+  let selectedIndex = 0;
+  let currentMatches = [];
+
+  function getAvailableFunctions() {
+    const actions = [];
+
+    document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
+      const label = link.querySelector('span')?.textContent.trim();
+      const svgEl = link.querySelector('svg');
+      const iconHtml = svgEl ? svgEl.outerHTML : '';
+      if (label) {
+        actions.push({
+          label,
+          icon: iconHtml,
+          hint: 'Halaman',
+          run: () => link.click()
+        });
+      }
+    });
+
+    if (document.getElementById('equipmentModal')) {
+      actions.push({
+        label: 'Tambah Peralatan Baru',
+        icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>`,
+        hint: 'Tindakan',
+        run: () => openAddModal()
+      });
+    }
+
+    if (document.getElementById('maintenanceModal')) {
+      actions.push({
+        label: 'Tambah Rekod Penyelenggaraan',
+        icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>`,
+        hint: 'Tindakan',
+        run: () => openMaintenanceModal()
+      });
+    }
+
+    return actions;
+  }
+
+  function renderCommandList(query = '') {
+    if (!commandResults) return;
+    const q = query.trim().toLowerCase();
+    const all = getAvailableFunctions();
+    const filtered = q ? all.filter(fn => fn.label.toLowerCase().includes(q)) : all;
+
+    if (filtered.length === 0) {
+      currentMatches = [];
+      commandResults.innerHTML = `<div class="command-item" style="color: var(--muted); cursor: default;">Tiada fungsi dijumpai</div>`;
+      return;
+    }
+
+    const pages = filtered.filter(fn => fn.hint === 'Halaman');
+    const actions = filtered.filter(fn => fn.hint === 'Tindakan');
+    currentMatches = [...pages, ...actions];
+    selectedIndex = 0;
+
+    let html = '';
+    let idx = 0;
+
+    if (pages.length > 0) {
+      html += `<div class="command-group-label">Makmal SKR 2 — Halaman</div>`;
+      pages.forEach(item => {
+        html += `
+          <button type="button" class="command-item ${idx === 0 ? 'selected' : ''}" data-cmd-idx="${idx}">
+            <span class="command-item-left">
+              ${item.icon}
+              <span>${item.label}</span>
+            </span>
+            <small>${item.hint}</small>
+          </button>
+        `;
+        idx++;
+      });
+    }
+
+    if (actions.length > 0) {
+      html += `<div class="command-group-label">Makmal SKR 2 — Tindakan</div>`;
+      actions.forEach(item => {
+        html += `
+          <button type="button" class="command-item ${idx === 0 ? 'selected' : ''}" data-cmd-idx="${idx}">
+            <span class="command-item-left">
+              ${item.icon}
+              <span>${item.label}</span>
+            </span>
+            <small>${item.hint}</small>
+          </button>
+        `;
+        idx++;
+      });
+    }
+
+    commandResults.innerHTML = html;
+
+    commandResults.querySelectorAll('.command-item[data-cmd-idx]').forEach((btn, i) => {
+      btn.addEventListener('click', () => executeCommand(i));
+      btn.addEventListener('mouseenter', () => {
+        selectedIndex = i;
+        updateSelectedHighlight();
+      });
+    });
+  }
+
+  function updateSelectedHighlight() {
+    commandResults.querySelectorAll('.command-item[data-cmd-idx]').forEach((el, idx) => {
+      el.classList.toggle('selected', idx === selectedIndex);
+    });
+  }
+
+  function executeCommand(idx) {
+    const item = currentMatches[idx];
+    if (!item) return;
+    commandModal.close();
+    item.run();
+  }
+
+  function openCommandModal() {
+    if (!commandModal) return;
+    commandInput.value = '';
+    renderCommandList('');
+    commandModal.showModal();
+    commandInput.focus();
+  }
+
+  if (openBtn) {
+    openBtn.addEventListener('click', openCommandModal);
+  }
+
+  if (commandInput) {
+    commandInput.addEventListener('input', (e) => renderCommandList(e.target.value));
+    commandInput.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (currentMatches.length > 0) {
+          selectedIndex = (selectedIndex + 1) % currentMatches.length;
+          updateSelectedHighlight();
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (currentMatches.length > 0) {
+          selectedIndex = (selectedIndex - 1 + currentMatches.length) % currentMatches.length;
+          updateSelectedHighlight();
+        }
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        executeCommand(selectedIndex);
+      }
+    });
+  }
+
+  if (commandModal) {
+    commandModal.addEventListener('click', (e) => {
+      if (e.target === commandModal) commandModal.close();
+    });
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      if (commandModal?.open) {
+        commandModal.close();
+      } else {
+        openCommandModal();
+      }
+    }
+  });
+
+  if (accountBtn && accountDropdown) {
+    accountBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const topName = document.getElementById('userName')?.textContent;
+      if (topName) setElText('dropdownUserName', topName);
+      accountDropdown.classList.toggle('open');
+    });
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.account-menu') && accountDropdown) {
+      accountDropdown.classList.remove('open');
+    }
+  });
 }
 
 // ==========================================================
@@ -111,6 +307,24 @@ function renderDashboard() {
   setElText('repGood', baik);
   setElText('repMaintenance', perhatian + rosak);
   setElText('repLogsCount', logs.length);
+
+  // Sync Account Dropdown name & live lab status pill
+  const topName = document.getElementById('userName')?.textContent;
+  if (topName) setElText('dropdownUserName', topName);
+
+  const statusPill = document.getElementById('dropdownLabStatus');
+  if (statusPill) {
+    if (rosak > 0) {
+      statusPill.textContent = `${rosak} Rosak`;
+      statusPill.className = 'badge danger';
+    } else if (perhatian > 0) {
+      statusPill.textContent = `${perhatian} Perhatian`;
+      statusPill.className = 'badge warning';
+    } else {
+      statusPill.textContent = 'Semua Baik';
+      statusPill.className = 'badge';
+    }
+  }
 
   updateDashboardVisuals(total, baik, perhatian, rosak);
 

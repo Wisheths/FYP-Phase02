@@ -9,16 +9,14 @@
 <body>
 
   <aside class="sidebar" id="sidebar">
- <div class="brand">
-  <div class="brand-left">
-    <div class="brand-icon" onclick="toggleSidebar()" title="Kecilkan / Buka Sidebar">SK</div>
-    <div class="brand-text">
-      <h2>Makmal SKR 2</h2>
-      <p>Panel Pentadbir</p>
+    <div class="brand">
+      <div class="brand-left">
+        <div class="brand-icon" onclick="toggleSidebar()" title="Kecilkan / Buka Sidebar">SK</div>
+        <div class="brand-text">
+          <h2>Makmal SKR 2</h2>
+        </div>
+      </div>
     </div>
-  </div>
-
-</div>
 
     <nav class="sidebar-nav">
       <a class="nav-link active" href="#dashboard" onclick="showSection('dashboard', this, event)">
@@ -42,18 +40,71 @@
         <span>Laporan</span>
       </a>
     </nav>
-
-    <div class="user-card">
-      <div class="avatar" id="userAvatar">P</div>
-      <div class="user-info">
-        <strong id="userName">Pentadbir</strong>
-        <span class="role-badge" id="userRoleLabel">Pentadbir</span>
-        <button class="logout-btn" onclick="logout()">Log Keluar</button>
-      </div>
-    </div>
   </aside>
 
   <main class="main-content">
+    <header class="topbar">
+      <!-- Command Palette Trigger Button -->
+      <div class="topbar-search-wrap">
+        <button type="button" id="openSearchModalBtn" class="topbar-search-trigger">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <span>Cari fungsi dashboard...</span>
+          <kbd class="search-kbd">Ctrl K</kbd>
+        </button>
+      </div>
+
+      <!-- Account Dropdown (Neon Style) -->
+      <div class="account-menu">
+        <button type="button" id="accountBtn" class="account-trigger">
+          <div class="avatar" id="userAvatar">P</div>
+          <strong id="userName">Pentadbir</strong>
+          <svg class="chevron-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+
+        <div id="accountDropdown" class="account-dropdown">
+          <div class="dropdown-section">
+            <div class="dropdown-section-title">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M9 3v18"></path></svg>
+              <span>Organisasi</span>
+            </div>
+            <div class="dropdown-info">
+              <strong>Makmal SKR 2</strong>
+              <small>KV Alor Setar</small>
+            </div>
+          </div>
+
+          <div class="dropdown-section">
+            <div class="dropdown-section-title">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+              <span>Akaun</span>
+            </div>
+            <div class="dropdown-info">
+              <strong id="dropdownUserName">Pengguna</strong>
+              <small id="userRoleLabel" class="role-badge">Peranan</small>
+            </div>
+          </div>
+
+          <div class="dropdown-section">
+            <div class="dropdown-status-row">
+              <span>Status Makmal</span>
+              <span id="dropdownLabStatus" class="badge">Semua Baik</span>
+            </div>
+          </div>
+
+          <div class="dropdown-section">
+            <button type="button" class="dropdown-item danger" onclick="logout()">
+              Log Keluar
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
     <!-- DASHBOARD -->
     <section id="dashboard" class="content-section active-section">
       <div class="stats-grid">
@@ -223,6 +274,26 @@
         <button type="submit" class="button">Rekodkan</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- COMMAND PALETTE MODAL -->
+  <dialog id="commandModal" class="command-modal">
+    <div class="command-box">
+      <div class="command-input-row">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input
+          type="text"
+          id="commandSearchInput"
+          placeholder="Cari fungsi atau halaman..."
+          autocomplete="off"
+        />
+        <kbd class="search-kbd">ESC</kbd>
+      </div>
+      <div id="commandResults" class="command-results"></div>
+    </div>
   </dialog>
 
   <div id="toastContainer" class="toast-container"></div>
