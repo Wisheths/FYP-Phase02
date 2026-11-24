@@ -1,9 +1,14 @@
 /* ==========================================================
-   LOCAL STORAGE MODULE (storage.js)
+   FIREBASE FIRESTORE STORAGE MODULE (js/storage.js)
    ========================================================== */
-
-const EQUIPMENT_STORAGE_KEY = 'skr2_equipment_data';
-const MAINTENANCE_STORAGE_KEY = 'skr2_maintenance_logs';
+import { db } from "./firebase-config.js";
+import {
+  collection,
+  doc,
+  getDocs,
+  setDoc,
+  deleteDoc
+} from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const DEFAULT_EQUIPMENT = [
   { id: 'PC-001', model: 'Dell OptiPlex 3080', serial: 'DL-3080-001', location: 'Baris A - Meja 1', condition: 'Baik', status: 'Aktif' },
@@ -20,36 +25,83 @@ const DEFAULT_MAINTENANCE_LOGS = [
   { id: 'MNT-003', pcId: 'PC-001', type: 'Pencegahan (Preventive)', date: '2026-10-25', notes: 'Pembersihan habuk dalaman dan kemaskini Windows selesai.', status: 'Selesai' }
 ];
 
-function getEquipment() {
+let equipmentCache = [];
+let maintenanceCache = [];
+
+export async function initStorage() {
   try {
-    const data = localStorage.getItem(EQUIPMENT_STORAGE_KEY);
-    if (!data) {
-      saveEquipment(DEFAULT_EQUIPMENT);
-      return DEFAULT_EQUIPMENT;
+    // 1. Load Equipment from Firestore
+    const eqSnap = await getDocs(collection(db, "equipment"));
+    if (eqSnap.empty) {
+      for (const item of DEFAULT_EQUIPMENT) {
+        await setDoc(doc(db, "equipment", item.id), item);
+      }
+      equipmentCache = [...DEFAULT_EQUIPMENT];
+    } else {
+      equipmentCache = eqSnap.docs
+        .map(d => d.data())
+        .sort((a, b) => a.id.localeCompare(b.id));
     }
-    return JSON.parse(data);
-  } catch (e) {
-    return DEFAULT_EQUIPMENT;
+
+    // 2. Load Maintenance Logs from Firestore
+    const mntSnap = await getDocs(collection(db, "maintenance_logs"));
+    if (mntSnap.empty) {
+      for (const log of DEFAULT_MAINTENANCE_LOGS) {
+        await setDoc(doc(db, "maintenance_logs", log.id), log);
+      }
+      maintenanceCache = [...DEFAULT_MAINTENANCE_LOGS];
+    } else {
+      maintenanceCache = mntSnap.docs
+        .map(d => d.data())
+        .sort((a, b) => b.id.localeCompare(a.id));
+    }
+  } catch (err) {
+    console.error("Ralat memuatkan data Firestore:", err);
   }
 }
 
-function saveEquipment(equipment) {
-  localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(equipment));
+function getEquipment() {
+  return equipmentCache;
+}
+
+async function saveEquipment(updatedList) {
+  const oldIds = new Set(equipmentCache.map(item => item.id));
+  const newIds = new Set(updatedList.map(item => item.id));
+  equipmentCache = [...updatedList];
+
+  try {
+    for (const item of updatedList) {
+      await setDoc(doc(db, "equipment", item.id), item);
+    }
+    for (const oldId of oldIds) {
+      if (!newIds.has(oldId)) {
+        await deleteDoc(doc(db, "equipment", oldId));
+      }
+    }
+  } catch (err) {
+    console.error("Ralat menyimpan peralatan ke Firestore:", err);
+  }
 }
 
 function getMaintenanceLogs() {
+  return maintenanceCache;
+}
+
+async function saveMaintenanceLogs(updatedLogs) {
+  maintenanceCache = [...updatedLogs];
   try {
-    const data = localStorage.getItem(MAINTENANCE_STORAGE_KEY);
-    if (!data) {
-      saveMaintenanceLogs(DEFAULT_MAINTENANCE_LOGS);
-      return DEFAULT_MAINTENANCE_LOGS;
+    for (const log of updatedLogs) {
+      await setDoc(doc(db, "maintenance_logs", log.id), log);
     }
-    return JSON.parse(data);
-  } catch (e) {
-    return DEFAULT_MAINTENANCE_LOGS;
+  } catch (err) {
+    console.error("Ralat menyimpan rekod penyelenggaraan:", err);
   }
 }
 
-function saveMaintenanceLogs(logs) {
-  localStorage.setItem(MAINTENANCE_STORAGE_KEY, JSON.stringify(logs));
-}
+// Expose globally for uiController.js and predictionEngine.js
+window.getEquipment = getEquipment;
+window.saveEquipment = saveEquipment;
+window.getMaintenanceLogs = getMaintenanceLogs;
+window.saveMaintenanceLogs = saveMaintenanceLogs;
+window.getEquipmentData = getEquipment;
+window.getMaintenanceData = () => maintenanceCache.map(l => ({ ...l, equipmentId: l.pcId }));

@@ -37,7 +37,7 @@
       <button type="submit" class="button auth-submit">Log Masuk</button>
 
       <div class="demo-box">
-        <p class="demo-title">Akaun Demo (Kata laluan: <span class="mono-text">123</span>)</p>
+        <p class="demo-title">Akaun Demo (Kata laluan: <span class="mono-text">123456</span>)</p>
         <ul>
           <li><strong>Pentadbir:</strong> <span class="mono-text">admin@kvas.edu.my</span></li>
           <li><strong>Juruteknik:</strong> <span class="mono-text">tech@kvas.edu.my</span></li>
@@ -58,7 +58,7 @@
       </div>
       <div class="form-group">
         <label for="regPassword">Kata Laluan</label>
-        <input type="password" id="regPassword" required placeholder="Minimum 3 aksara" class="input-field">
+        <input type="password" id="regPassword" required placeholder="Minimum 6 aksara" class="input-field">
       </div>
       <div class="form-group">
         <label for="regRole">Peranan Pengguna</label>
@@ -72,7 +72,7 @@
     </form>
   </div>
 
-  <script src="js/auth.js"></script>
+  <script type="module" src="js/auth.js"></script>
   <script>
     function switchAuthTab(mode) {
       const isLogin = mode === 'login';

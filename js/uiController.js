@@ -25,7 +25,19 @@ const SECTION_META = {
   }
 };
 
-// Safe DOM helper
+// Compatibility bridges for diagnosticEngine.js
+function getEquipmentData() {
+  return getEquipment();
+}
+
+function getMaintenanceData() {
+  return getMaintenanceLogs().map(log => ({
+    ...log,
+    equipmentId: log.pcId
+  }));
+}
+
+// Safe DOM text helper
 function setElText(id, text) {
   const el = document.getElementById(id);
   if (el) el.textContent = text;
@@ -95,7 +107,6 @@ function renderDashboard() {
   setElText('statPerhatian', perhatian);
   setElText('statRosak', rosak);
 
-  // Update Report Stats safely
   setElText('repTotal', total);
   setElText('repGood', baik);
   setElText('repMaintenance', perhatian + rosak);
@@ -103,7 +114,6 @@ function renderDashboard() {
 
   updateDashboardVisuals(total, baik, perhatian, rosak);
 
-  // Maintenance Alert Banner
   const alertEl = document.getElementById('maintenanceAlertText');
   if (alertEl) {
     if (rosak > 0 || perhatian > 0) {
@@ -113,7 +123,6 @@ function renderDashboard() {
     }
   }
 
-  // Dashboard Mini Table (Latest 5)
   const dashBody = document.getElementById('dashboardTableBody');
   if (dashBody) {
     dashBody.innerHTML = equipment.slice(0, 5).map(eq => `
@@ -175,7 +184,7 @@ function renderEquipmentTable() {
     );
 
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="${isAdmin ? 7 : 6}" style="text-align:center; padding: 20px; color: var(--text-muted);">Tiada rekod peralatan dijumpai.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${isAdmin ? 7 : 6}" style="text-align:center; padding: 20px; color: var(--muted);">Tiada rekod peralatan dijumpai.</td></tr>`;
     return;
   }
 
@@ -188,9 +197,9 @@ function renderEquipmentTable() {
       <td><span class="badge ${getConditionClass(eq.condition)}">${eq.condition}</span></td>
       <td><span class="badge ${getStatusClass(eq.status)}">${eq.status}</span></td>
       ${isAdmin ? `
-        <td class="admin-only">
-          <button class="button-small" onclick="openEditModal(${eq.originalIndex})">Edit</button>
-          <button class="button-small danger" onclick="deleteEquipment(${eq.originalIndex})">Padam</button>
+        <td class="admin-only" style="white-space: nowrap;">
+          <button class="button button-outline" style="padding: 4px 10px; font-size: 12px;" onclick="openEditModal(${eq.originalIndex})">Edit</button>
+          <button class="button button-outline" style="padding: 4px 10px; font-size: 12px; color: var(--danger); border-color: rgba(217, 102, 96, 0.35);" onclick="deleteEquipment(${eq.originalIndex})">Padam</button>
         </td>
       ` : ''}
     </tr>
@@ -269,4 +278,126 @@ function deleteEquipment(index) {
   }
 }
 
-// =
+// ==========================================================
+// MAINTENANCE TABLE & MODAL
+// ==========================================================
+function renderMaintenanceTable() {
+  const tbody = document.getElementById('maintenanceTableBody');
+  if (!tbody) return;
+
+  const logs = getMaintenanceLogs();
+  if (logs.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 20px; color: var(--muted);">Tiada rekod penyelenggaraan.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = logs.map(log => `
+    <tr>
+      <td class="mono-text">${log.id}</td>
+      <td class="mono-text">${log.pcId}</td>
+      <td>${log.type}</td>
+      <td>${log.date}</td>
+      <td>${log.notes}</td>
+      <td><span class="badge ${getStatusClass(log.status)}">${log.status}</span></td>
+    </tr>
+  `).join('');
+}
+
+function openMaintenanceModal() {
+  const modal = document.getElementById('maintenanceModal');
+  if (!modal) return;
+
+  const select = document.getElementById('maintPcId');
+  const equipment = getEquipment();
+  select.innerHTML = equipment.map(eq => `<option value="${eq.id}">${eq.id} — ${eq.model}</option>`).join('');
+
+  document.getElementById('maintenanceForm').reset();
+  document.getElementById('maintDate').value = new Date().toISOString().split('T')[0];
+  modal.showModal();
+}
+
+function closeMaintenanceModal() {
+  const modal = document.getElementById('maintenanceModal');
+  if (modal) modal.close();
+}
+
+function saveMaintenanceForm(event) {
+  event.preventDefault();
+  const logs = getMaintenanceLogs();
+  const nextNum = String(logs.length + 1).padStart(3, '0');
+
+  const newLog = {
+    id: `MNT-${nextNum}`,
+    pcId: document.getElementById('maintPcId').value,
+    type: document.getElementById('maintType').value,
+    date: document.getElementById('maintDate').value,
+    notes: document.getElementById('maintNotes').value.trim(),
+    status: document.getElementById('maintStatus').value
+  };
+
+  logs.unshift(newLog);
+  saveMaintenanceLogs(logs);
+  closeMaintenanceModal();
+  refreshAllUI();
+  showToast(`Rekod ${newLog.id} berjaya disimpan.`);
+}
+
+// ==========================================================
+// DIAGNOSTIC / PREDICTION MODULE
+// ==========================================================
+function populatePredictionDropdown() {
+  const select = document.getElementById('selectPcPrediction');
+  if (!select) return;
+
+  const equipment = getEquipment();
+  select.innerHTML = `<option value="">-- Pilih Komputer --</option>` +
+    equipment.map(eq => `<option value="${eq.id}">${eq.id} (${eq.model})</option>`).join('');
+}
+
+function runPredictionAnalysis() {
+  const pcId = document.getElementById('selectPcPrediction').value;
+  if (!pcId || typeof analyzeEquipmentRisk !== 'function') return;
+
+  const result = analyzeEquipmentRisk(pcId);
+  if (!result) return;
+
+  setElText('rulePcId', result.id);
+  setElText('ruleRiskScore', result.riskScore);
+  setElText('ruleNextSchedule', result.timeframe);
+
+  const badge = document.getElementById('ruleRiskBadge');
+  if (badge) {
+    badge.textContent = result.badgeLabel;
+    badge.className = `badge ${result.badgeType === 'repair' ? 'danger' : result.badgeType === 'attention' ? 'warning' : ''}`;
+  }
+
+  const list = document.getElementById('ruleActionList');
+  if (list) {
+    list.innerHTML = result.actions.map(a => `<li>${a}</li>`).join('');
+  }
+}
+
+// ==========================================================
+// HELPERS & TOASTS
+// ==========================================================
+function getConditionClass(condition) {
+  if (condition === 'Rosak') return 'danger';
+  if (condition === 'Perlu diperiksa') return 'warning';
+  return '';
+}
+
+function getStatusClass(status) {
+  if (status === 'Penyelenggaraan' || status === 'Belum Selesai') return 'danger';
+  if (status === 'Perlu perhatian' || status === 'Dalam Proses') return 'warning';
+  return '';
+}
+
+function showToast(message) {
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
