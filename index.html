@@ -1,87 +1,78 @@
 <!DOCTYPE html>
-<html lang="ms">
+<html lang="ms" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Log Masuk · Sistem Pengurusan Makmal SKR 2</title>
+  <title>Log Masuk · R-CEMS KVAS</title>
+  <link rel="icon" type="image/png" href="assets/kvas-logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="auth-body">
 
   <div class="auth-card">
     <div class="auth-brand">
-      <div class="brand-icon">SK</div>
+      <div class="logo-wrap">
+        <img src="assets/kvas-logo.png" alt="Logo KVAS" class="brand-logo" onerror="this.hidden=true; this.nextElementSibling.hidden=false;">
+        <div class="brand-fallback" hidden>KV</div>
+      </div>
       <div>
-        <h2>Makmal SKR 2</h2>
-        <p>Kolej Vokasional Alor Setar</p>
+        <h1>R-CEMS</h1>
+        <p>Kolej Vokasional Alor Setar · Makmal SKR</p>
       </div>
     </div>
 
     <div class="auth-tabs">
-      <button type="button" id="tabLogin" class="auth-tab active" onclick="switchAuthTab('login')">Log Masuk</button>
-      <button type="button" id="tabRegister" class="auth-tab" onclick="switchAuthTab('register')">Daftar Akaun</button>
+      <button type="button" id="tabLogin" class="auth-tab active">Log Masuk</button>
+      <button type="button" id="tabRegister" class="auth-tab">Daftar Akaun</button>
     </div>
 
-    <div id="authError" class="auth-error" style="display: none;"></div>
+    <div id="authError" class="auth-error" hidden></div>
 
-    <!-- LOGIN FORM -->
-    <form id="loginForm" onsubmit="handleLogin(event)">
+    <form id="loginForm">
       <div class="form-group">
         <label for="loginEmail">Emel Pengguna</label>
-        <input type="email" id="loginEmail" required placeholder="contoh@kvas.edu.my" class="input-field">
+        <input type="email" id="loginEmail" required placeholder="nama@kvas.edu.my" class="input-field" autocomplete="email">
       </div>
       <div class="form-group">
         <label for="loginPassword">Kata Laluan</label>
-        <input type="password" id="loginPassword" required placeholder="••••••••" class="input-field">
+        <input type="password" id="loginPassword" required placeholder="••••••••" class="input-field" autocomplete="current-password">
       </div>
       <button type="submit" class="button auth-submit">Log Masuk</button>
-
-      <div class="demo-box">
-        <p class="demo-title">Akaun Demo (Kata laluan: <span class="mono-text">123456</span>)</p>
-        <ul>
-          <li><strong>Pentadbir:</strong> <span class="mono-text">admin@kvas.edu.my</span></li>
-          <li><strong>Juruteknik:</strong> <span class="mono-text">tech@kvas.edu.my</span></li>
-          <li><strong>Penyelia:</strong> <span class="mono-text">penyelia@kvas.edu.my</span></li>
-        </ul>
-      </div>
     </form>
 
-    <!-- SIGN UP FORM -->
-    <form id="registerForm" onsubmit="handleSignUp(event)" style="display: none;">
+    <form id="registerForm" hidden>
       <div class="form-group">
         <label for="regName">Nama Penuh</label>
-        <input type="text" id="regName" required placeholder="Nama anda" class="input-field">
+        <input type="text" id="regName" required placeholder="Nama penuh anda" class="input-field" autocomplete="name">
       </div>
       <div class="form-group">
         <label for="regEmail">Emel</label>
-        <input type="email" id="regEmail" required placeholder="nama@kvas.edu.my" class="input-field">
+        <input type="email" id="regEmail" required placeholder="nama@kvas.edu.my" class="input-field" autocomplete="email">
       </div>
       <div class="form-group">
         <label for="regPassword">Kata Laluan</label>
-        <input type="password" id="regPassword" required placeholder="Minimum 6 aksara" class="input-field">
+        <input type="password" id="regPassword" required minlength="6" placeholder="Minimum 6 aksara" class="input-field" autocomplete="new-password">
       </div>
-      <div class="form-group">
-        <label for="regRole">Peranan Pengguna</label>
-        <select id="regRole" class="input-field">
-          <option value="Pentadbir">Pentadbir Sistem</option>
-          <option value="Juruteknik">Juruteknik Makmal</option>
-          <option value="Penyelia">Penyelia Makmal</option>
-        </select>
-      </div>
-      <button type="submit" class="button auth-submit">Daftar & Masuk</button>
+      <button type="submit" class="button auth-submit">Daftar &amp; Masuk</button>
+      <p class="auth-note">Akaun baharu didaftarkan sebagai Penyelia (baca sahaja). Pentadbir boleh mengemaskini peranan anda.</p>
     </form>
+
+    <div class="auth-divider"><span>atau</span></div>
+
+    <button type="button" id="googleLoginBtn" class="button button-outline auth-google">
+      <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.68-.22-2.48H12v4.69h6.46a5.52 5.52 0 0 1-2.39 3.62v3.01h3.87c2.26-2.08 3.58-5.15 3.58-8.84z"/>
+        <path fill="#34A853" d="M12 24c3.24 0 5.95-1.07 7.94-2.9l-3.87-3.01c-1.07.72-2.45 1.15-4.07 1.15-3.13 0-5.78-2.11-6.73-4.96H1.27v3.11A12 12 0 0 0 12 24z"/>
+        <path fill="#FBBC05" d="M5.27 14.28A7.2 7.2 0 0 1 4.9 12c0-.79.14-1.56.37-2.28V6.61H1.27A12 12 0 0 0 0 12c0 1.94.46 3.77 1.27 5.39l4-3.11z"/>
+        <path fill="#EA4335" d="M12 4.75c1.76 0 3.34.61 4.58 1.8l3.44-3.44C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.27 6.61l4 3.11C6.22 6.86 8.87 4.75 12 4.75z"/>
+      </svg>
+      <span>Teruskan dengan Google</span>
+    </button>
   </div>
 
   <script type="module" src="js/auth.js"></script>
-  <script>
-    function switchAuthTab(mode) {
-      const isLogin = mode === 'login';
-      document.getElementById('loginForm').style.display = isLogin ? 'block' : 'none';
-      document.getElementById('registerForm').style.display = isLogin ? 'none' : 'block';
-      document.getElementById('tabLogin').classList.toggle('active', isLogin);
-      document.getElementById('tabRegister').classList.toggle('active', !isLogin);
-      document.getElementById('authError').style.display = 'none';
-    }
-  </script>
 </body>
 </html>

@@ -1,12 +1,10 @@
-/* ==========================================================
-   FIREBASE AUTHENTICATION MODULE (js/auth.js)
-   ========================================================== */
-import { auth, db } from "./firebase-config.js";
-import { initStorage } from "./storage.js";
+import { auth, db } from "./config.js";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithPopup,
   signOut
 } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
 import {
@@ -15,134 +13,189 @@ import {
   setDoc
 } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
-const ROLE_PAGES = {
-  Pentadbir: "pentadbir.html",
-  Juruteknik: "juruteknik.html",
-  Penyelia: "penyelia.html"
-};
+const normalizedPath = window.location.pathname.replace(/\/+$/, "").replace(/\.html$/, "");
+const isDashboardPage = normalizedPath.endsWith("/dashboard");
+const isLoginPage = !isDashboardPage;
 
-const PAGE_EXPECTED_ROLE = {
-  "pentadbir.html": "Pentadbir",
-  "juruteknik.html": "Juruteknik",
-  "penyelia.html": "Penyelia"
-};
+let authActionInFlight = false;
 
 function showAuthError(msg) {
   const box = document.getElementById("authError");
-  if (!box) {
-    alert(msg);
-    return;
-  }
+  if (!box) return;
   box.textContent = msg;
-  box.style.display = "block";
+  box.hidden = false;
 }
 
-function redirectByRole(role) {
-  const target = ROLE_PAGES[role];
-  if (!target) {
-    showAuthError("Peranan pengguna tidak sah: " + role);
-    return;
+function clearAuthError() {
+  const box = document.getElementById("authError");
+  if (!box) return;
+  box.textContent = "";
+  box.hidden = true;
+}
+
+export async function ensureUserProfile(user, explicitName = "") {
+  const userRef = doc(db, "users", user.uid);
+  const userSnap = await getDoc(userRef);
+
+  if (userSnap.exists()) {
+    return { uid: user.uid, ...userSnap.data() };
   }
-  window.location.href = target;
+
+  const fallbackName = explicitName
+    || user.displayName
+    || (user.email ? user.email.split("@")[0] : "Pengguna");
+
+  const profile = {
+    name: fallbackName,
+    email: (user.email || "").toLowerCase(),
+    role: "Penyelia",
+    createdAt: new Date().toISOString()
+  };
+
+  await setDoc(userRef, profile);
+  return { uid: user.uid, ...profile };
+}
+
+function switchAuthTab(mode) {
+  const isLogin = mode === "login";
+  const loginForm = document.getElementById("loginForm");
+  const registerForm = document.getElementById("registerForm");
+  const tabLogin = document.getElementById("tabLogin");
+  const tabRegister = document.getElementById("tabRegister");
+
+  if (loginForm) loginForm.hidden = !isLogin;
+  if (registerForm) registerForm.hidden = isLogin;
+  if (tabLogin) tabLogin.classList.toggle("active", isLogin);
+  if (tabRegister) tabRegister.classList.toggle("active", !isLogin);
+  clearAuthError();
 }
 
 async function handleLogin(event) {
   event.preventDefault();
+  clearAuthError();
+
   const email = document.getElementById("loginEmail").value.trim().toLowerCase();
   const password = document.getElementById("loginPassword").value;
+  const submitBtn = event.currentTarget.querySelector('button[type="submit"]');
+
+  if (submitBtn) submitBtn.disabled = true;
+  authActionInFlight = true;
 
   try {
     const cred = await signInWithEmailAndPassword(auth, email, password);
-    const userDoc = await getDoc(doc(db, "users", cred.user.uid));
-
-    if (!userDoc.exists()) {
-      showAuthError("Profil peranan pengguna tidak dijumpai dalam pangkalan data.");
-      return;
-    }
-
-    redirectByRole(userDoc.data().role);
+    await ensureUserProfile(cred.user);
+    window.location.replace("dashboard.html");
   } catch (err) {
+    authActionInFlight = false;
     showAuthError("Log masuk gagal: Emel atau kata laluan salah.");
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
   }
 }
 
 async function handleSignUp(event) {
   event.preventDefault();
+  clearAuthError();
+
   const name = document.getElementById("regName").value.trim();
   const email = document.getElementById("regEmail").value.trim().toLowerCase();
   const password = document.getElementById("regPassword").value;
-  const role = document.getElementById("regRole").value;
+  const submitBtn = event.currentTarget.querySelector('button[type="submit"]');
 
   if (!name || !email || password.length < 6) {
-    showAuthError("Sila lengkapkan maklumat (kata laluan Firebase minimum 6 aksara).");
+    showAuthError("Sila lengkapkan maklumat (kata laluan minimum 6 aksara).");
     return;
   }
 
+  if (submitBtn) submitBtn.disabled = true;
+  authActionInFlight = true;
+
   try {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
-    await setDoc(doc(db, "users", cred.user.uid), {
-      name,
-      email,
-      role,
-      createdAt: new Date().toISOString()
-    });
-
-    redirectByRole(role);
+    await ensureUserProfile(cred.user, name);
+    window.location.replace("dashboard.html");
   } catch (err) {
+    authActionInFlight = false;
     if (err.code === "auth/email-already-in-use") {
       showAuthError("Emel ini telah didaftarkan.");
     } else {
-      showAuthError("Pendaftaran gagal: " + err.message);
+      showAuthError(`Pendaftaran gagal: ${err.message}`);
     }
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
   }
 }
 
-async function logout() {
-  await signOut(auth);
-  window.location.href = "index.html";
+async function handleGoogleLogin() {
+  clearAuthError();
+  const googleBtn = document.getElementById("googleLoginBtn");
+  if (googleBtn) googleBtn.disabled = true;
+  authActionInFlight = true;
+
+  try {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    const cred = await signInWithPopup(auth, provider);
+    await ensureUserProfile(cred.user);
+    window.location.replace("dashboard.html");
+  } catch (err) {
+    authActionInFlight = false;
+    if (err.code === "auth/popup-closed-by-user") {
+      showAuthError("Log masuk Google dibatalkan.");
+    } else {
+      showAuthError(`Log masuk Google gagal: ${err.message}`);
+    }
+  } finally {
+    if (googleBtn) googleBtn.disabled = false;
+  }
 }
 
-// Automatically protect dashboard pages and load Firestore data
-const currentPage = window.location.pathname.split("/").pop();
-const expectedRole = PAGE_EXPECTED_ROLE[currentPage];
+export async function logout() {
+  await signOut(auth);
+  window.location.replace("index.html");
+}
 
-if (expectedRole) {
-  onAuthStateChanged(auth, async (user) => {
+export function onDashboardAuth(callback) {
+  return onAuthStateChanged(auth, async (user) => {
     if (!user) {
-      window.location.href = "index.html";
+      window.location.replace("index.html");
       return;
     }
 
-    const userDoc = await getDoc(doc(db, "users", user.uid));
-    if (!userDoc.exists()) {
-      window.location.href = "index.html";
-      return;
-    }
-
-    const profile = userDoc.data();
-    if (profile.role !== expectedRole) {
-      redirectByRole(profile.role);
-      return;
-    }
-
-    document.body.dataset.role = profile.role;
-
-    const nameEl = document.getElementById("userName");
-    const roleEl = document.getElementById("userRoleLabel");
-    const avatarEl = document.getElementById("userAvatar");
-
-    if (nameEl) nameEl.textContent = profile.name;
-    if (roleEl) roleEl.textContent = profile.role;
-    if (avatarEl) avatarEl.textContent = profile.name.charAt(0).toUpperCase();
-
-    await initStorage();
-    if (typeof window.refreshAllUI === "function") {
-      window.refreshAllUI();
+    try {
+      const profile = await ensureUserProfile(user);
+      await callback(user, profile);
+    } catch (err) {
+      console.error("Ralat mengesahkan profil pengguna:", err);
+      await signOut(auth);
+      window.location.replace("index.html");
     }
   });
 }
 
-// Expose functions globally for HTML onsubmit / onclick attributes
-window.handleLogin = handleLogin;
-window.handleSignUp = handleSignUp;
-window.logout = logout;
+if (isLoginPage) {
+  document.addEventListener("DOMContentLoaded", () => {
+    const tabLogin = document.getElementById("tabLogin");
+    const tabRegister = document.getElementById("tabRegister");
+    const loginForm = document.getElementById("loginForm");
+    const registerForm = document.getElementById("registerForm");
+    const googleBtn = document.getElementById("googleLoginBtn");
+
+    if (tabLogin) tabLogin.addEventListener("click", () => switchAuthTab("login"));
+    if (tabRegister) tabRegister.addEventListener("click", () => switchAuthTab("register"));
+    if (loginForm) loginForm.addEventListener("submit", handleLogin);
+    if (registerForm) registerForm.addEventListener("submit", handleSignUp);
+    if (googleBtn) googleBtn.addEventListener("click", handleGoogleLogin);
+
+    onAuthStateChanged(auth, async (user) => {
+      if (user && !authActionInFlight) {
+        try {
+          await ensureUserProfile(user);
+          window.location.replace("dashboard.html");
+        } catch (err) {
+          console.error("Ralat semakan sesi:", err);
+        }
+      }
+    });
+  });
+}

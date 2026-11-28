@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userRole() == 'Pentadbir';
+    }
+
+    function isTechOrAdmin() {
+      return isSignedIn() && (userRole() == 'Pentadbir' || userRole() == 'Juruteknik');
+    }
+
+    // Users: anyone signed in can read own profile; new sign-ups forced to 'Penyelia'; only Admin can change roles
+    match /users/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.role == 'Penyelia';
+      allow update: if isAdmin()
+        || (request.auth.uid == uid && request.resource.data.role == resource.data.role);
+      allow delete: if isAdmin();
+    }
+
+    // Labs & Brand/Model settings: all signed-in read, Admin writes
+    match /labs/{labId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /equipment_brands/{brandId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Equipment: all signed-in read; Admin full CRUD; Tech can only update condition & status
+    match /equipment/{eqId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (isTechOrAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['condition', 'status', 'updatedAt']));
+    }
+
+    // Maintenance logs: all signed-in read; Tech/Admin create & update; Admin delete
+    match /maintenance_logs/{logId} {
+      allow read: if isSignedIn();
+      allow create, update: if isTechOrAdmin();
+      allow delete: if isAdmin();
+    }
+  }
+}
