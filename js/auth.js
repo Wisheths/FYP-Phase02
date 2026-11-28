@@ -13,6 +13,9 @@ import {
   setDoc
 } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
+const savedTheme = localStorage.getItem("rcems_theme") || "light";
+document.documentElement.dataset.theme = savedTheme;
+
 const normalizedPath = window.location.pathname.replace(/\/+$/, "").replace(/\.html$/, "");
 const isDashboardPage = normalizedPath.endsWith("/dashboard");
 const isLoginPage = !isDashboardPage;

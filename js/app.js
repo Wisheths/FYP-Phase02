@@ -16,6 +16,10 @@ import {
   updateUserRole
 } from "./storage.js";
 import { analyzeEquipmentRisk } from "./predictionEngine.js";
+import { initCommandPalette } from "./commandPalette.js";
+import { renderOfficialReport, triggerOfficialPrint } from "./printReport.js";
+
+const THEME_STORAGE_KEY = "rcems_theme";
 
 const ROLE_PERMISSIONS = {
   Pentadbir: {
@@ -41,11 +45,28 @@ const ROLE_PERMISSIONS = {
   }
 };
 
+const CONDITION_SEVERITY = {
+  "Rosak": 3,
+  "Perlu diperiksa": 2,
+  "Baik": 1
+};
+
 let currentUser = null;
 let currentProfile = null;
 let selectedLabId = "ALL";
 let currentPermissions = ROLE_PERMISSIONS.Penyelia;
 let confirmResolver = null;
+
+let eqConditionFilter = "ALL";
+let eqStatusFilter = "ALL";
+let eqSort = { key: "condition", dir: "desc" };
+
+let maintStatusFilter = "ALL";
+let maintTypeFilter = "ALL";
+let maintSort = { key: "date", dir: "desc" };
+
+let highlightedEquipmentId = null;
+let highlightedLogId = null;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -69,6 +90,29 @@ function showToast(message, type = "info") {
   toast.textContent = message;
   container.appendChild(toast);
   setTimeout(() => toast.remove(), 3500);
+}
+
+function applyTheme(theme) {
+  const normalized = theme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = normalized;
+  localStorage.setItem(THEME_STORAGE_KEY, normalized);
+
+  const sunIcon = document.getElementById("themeIconSun");
+  const moonIcon = document.getElementById("themeIconMoon");
+  if (sunIcon && moonIcon) {
+    sunIcon.hidden = normalized === "light";
+    moonIcon.hidden = normalized === "dark";
+  }
+}
+
+function toggleTheme() {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  applyTheme(next);
+}
+
+function closeMobileSidebar() {
+  document.getElementById("sidebar")?.classList.remove("mobile-open");
+  document.getElementById("sidebarBackdrop")?.classList.remove("open");
 }
 
 function openConfirmDialog({ title, message, confirmLabel = "Sahkan", danger = false }) {
@@ -110,13 +154,18 @@ function getStatusClass(status) {
   return "";
 }
 
+function getRowHighlightClass(condition) {
+  if (condition === "Rosak") return "row-danger";
+  if (condition === "Perlu diperiksa") return "row-warning";
+  return "";
+}
+
 function applyRolePermissions(role) {
   currentPermissions = ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.Penyelia;
   document.body.dataset.role = role;
 
   document.querySelectorAll("#sidebarNav .nav-link").forEach(link => {
-    const sec = link.dataset.section;
-    if (!currentPermissions.sections.includes(sec)) {
+    if (!currentPermissions.sections.includes(link.dataset.section)) {
       link.remove();
     }
   });
@@ -126,6 +175,14 @@ function applyRolePermissions(role) {
       sec.remove();
     }
   });
+
+  if (!currentPermissions.canEditEquipment) {
+    document.querySelectorAll(".admin-only").forEach(el => el.remove());
+  }
+
+  if (!currentPermissions.canManageMaintenance) {
+    document.querySelectorAll(".tech-only").forEach(el => el.remove());
+  }
 }
 
 function showSection(sectionId) {
@@ -139,8 +196,13 @@ function showSection(sectionId) {
     link.classList.toggle("active", link.dataset.section === sectionId);
   });
 
+  closeMobileSidebar();
+
   if (sectionId === "modul-ramalan") {
     populatePredictionDropdown();
+  }
+  if (sectionId === "laporan") {
+    renderReportPreview();
   }
 }
 
@@ -162,7 +224,7 @@ function populateLabSwitcher() {
 }
 
 function renderDashboard() {
-  const { equipment, maintenanceLogs } = getScopedData();
+  const { equipment, labs } = getScopedData();
 
   const total = equipment.length;
   const baik = equipment.filter(e => e.condition === "Baik").length;
@@ -173,11 +235,6 @@ function renderDashboard() {
   setElText("statBaik", baik);
   setElText("statPerhatian", perhatian);
   setElText("statRosak", rosak);
-
-  setElText("repTotal", total);
-  setElText("repGood", baik);
-  setElText("repMaintenance", perhatian + rosak);
-  setElText("repLogsCount", maintenanceLogs.length);
 
   const pBaik = total > 0 ? Math.round((baik / total) * 100) : 0;
   setElText("visualHealthRatio", `${pBaik}% Sedia Digunakan`);
@@ -197,22 +254,24 @@ function renderDashboard() {
   const alertBanner = document.getElementById("topAlertBanner");
   const alertTitle = document.getElementById("alertBannerTitle");
   const alertText = document.getElementById("maintenanceAlertText");
+  const alertBtn = document.getElementById("alertActionBtn");
   if (alertBanner && alertText) {
     if (rosak > 0 || perhatian > 0) {
+      const affectedIds = [...new Set(equipment.filter(e => e.condition !== "Baik").map(e => e.labId))];
+      const labLabels = affectedIds.map(id => labs.find(l => l.id === id)?.name || id);
       alertBanner.hidden = false;
       alertBanner.classList.toggle("alert-critical", rosak > 0);
       if (alertTitle) {
-        alertTitle.textContent = rosak > 0 ? "Amaran Kerosakan Peralatan" : "Pemeriksaan Diperlukan";
+        alertTitle.textContent = rosak > 0 ? "Amaran Kerosakan Peralatan" : "Pemeriksaan Peralatan Diperlukan";
       }
-      alertText.textContent = `Terdapat ${rosak} komputer rosak dan ${perhatian} komputer memerlukan pemeriksaan segera.`;
+      alertText.textContent = `${rosak} komputer rosak dan ${perhatian} perlu diperiksa (${labLabels.join(", ")}).`;
+      if (alertBtn) {
+        alertBtn.textContent = rosak > 0 ? "Semak Komputer Rosak →" : "Semak Peralatan →";
+        alertBtn.dataset.targetCondition = rosak > 0 ? "Rosak" : "Perlu diperiksa";
+      }
     } else {
       alertBanner.hidden = true;
     }
-  }
-
-  const reportHealth = document.getElementById("reportHealthText");
-  if (reportHealth) {
-    reportHealth.textContent = `Kadar kebolehgunaan semasa ialah ${pBaik}% (${baik} daripada ${total} unit berfungsi dengan baik).`;
   }
 
   const dashBody = document.getElementById("dashboardTableBody");
@@ -220,8 +279,13 @@ function renderDashboard() {
     if (equipment.length === 0) {
       dashBody.innerHTML = `<tr><td colspan="6" class="empty-cell">Tiada peralatan berdaftar untuk paparan ini.</td></tr>`;
     } else {
-      dashBody.innerHTML = equipment.slice(0, 6).map(eq => `
-        <tr>
+      const prioritized = [...equipment].sort((a, b) => {
+        const diff = (CONDITION_SEVERITY[b.condition] || 0) - (CONDITION_SEVERITY[a.condition] || 0);
+        return diff !== 0 ? diff : a.pcCode.localeCompare(b.pcCode);
+      });
+
+      dashBody.innerHTML = prioritized.slice(0, 6).map(eq => `
+        <tr class="${getRowHighlightClass(eq.condition)}">
           <td class="mono-text">${escapeHtml(eq.pcCode)}</td>
           <td>${escapeHtml(eq.labId)}</td>
           <td>${escapeHtml(eq.brand)} ${escapeHtml(eq.model)}</td>
@@ -234,6 +298,25 @@ function renderDashboard() {
   }
 }
 
+function updateSortIndicators(tableId, sortState) {
+  document.querySelectorAll(`#${tableId} thead th[data-sort]`).forEach(th => {
+    const indicator = th.querySelector(".sort-indicator");
+    if (!indicator) return;
+    if (th.dataset.sort === sortState.key) {
+      indicator.textContent = sortState.dir === "asc" ? "↑" : "↓";
+    } else {
+      indicator.textContent = "";
+    }
+  });
+}
+
+function setEquipmentConditionPill(condition) {
+  eqConditionFilter = condition;
+  document.querySelectorAll("#equipmentConditionPills .filter-pill").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.condition === condition);
+  });
+}
+
 function renderEquipmentTable() {
   const tbody = document.getElementById("equipmentTableBody");
   if (!tbody) return;
@@ -242,37 +325,62 @@ function renderEquipmentTable() {
   const query = (document.getElementById("searchEquipment")?.value || "").trim().toLowerCase();
   const canEdit = currentPermissions.canEditEquipment;
 
-  const filtered = equipment.filter(eq =>
-    eq.pcCode.toLowerCase().includes(query) ||
-    eq.labId.toLowerCase().includes(query) ||
-    eq.brand.toLowerCase().includes(query) ||
-    eq.model.toLowerCase().includes(query) ||
-    eq.serial.toLowerCase().includes(query) ||
-    eq.location.toLowerCase().includes(query)
-  );
+  const filtered = equipment.filter(eq => {
+    const matchesCondition = eqConditionFilter === "ALL" || eq.condition === eqConditionFilter;
+    const matchesStatus = eqStatusFilter === "ALL" || eq.status === eqStatusFilter;
+    const matchesQuery =
+      !query ||
+      eq.pcCode.toLowerCase().includes(query) ||
+      eq.labId.toLowerCase().includes(query) ||
+      eq.brand.toLowerCase().includes(query) ||
+      eq.model.toLowerCase().includes(query) ||
+      eq.serial.toLowerCase().includes(query) ||
+      eq.location.toLowerCase().includes(query);
+    return matchesCondition && matchesStatus && matchesQuery;
+  });
+
+  filtered.sort((a, b) => {
+    const dir = eqSort.dir === "asc" ? 1 : -1;
+    if (eqSort.key === "condition") {
+      return ((CONDITION_SEVERITY[a.condition] || 0) - (CONDITION_SEVERITY[b.condition] || 0)) * dir;
+    }
+    if (eqSort.key === "model") {
+      return `${a.brand} ${a.model}`.localeCompare(`${b.brand} ${b.model}`) * dir;
+    }
+    return String(a[eqSort.key] || "").localeCompare(String(b[eqSort.key] || "")) * dir;
+  });
+
+  updateSortIndicators("equipmentTable", eqSort);
 
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="${canEdit ? 8 : 7}" class="empty-cell">Tiada rekod peralatan dijumpai.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${canEdit ? 8 : 7}" class="empty-cell">Tiada rekod peralatan sepadan dengan penapis.</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = filtered.map(eq => `
-    <tr>
-      <td class="mono-text">${escapeHtml(eq.pcCode)}</td>
-      <td>${escapeHtml(eq.labId)}</td>
-      <td>${escapeHtml(eq.brand)} ${escapeHtml(eq.model)}</td>
-      <td class="mono-text">${escapeHtml(eq.serial)}</td>
-      <td>${escapeHtml(eq.location)}</td>
-      <td><span class="badge ${getConditionClass(eq.condition)}">${escapeHtml(eq.condition)}</span></td>
-      <td><span class="badge ${getStatusClass(eq.status)}">${escapeHtml(eq.status)}</span></td>
-      ${canEdit ? `
-        <td class="actions-cell">
-          <button type="button" class="button button-outline btn-sm" data-action="edit-eq" data-id="${escapeHtml(eq.id)}">Edit</button>
-          <button type="button" class="button button-outline btn-sm btn-danger-outline" data-action="del-eq" data-id="${escapeHtml(eq.id)}">Padam</button>
-        </td>
-      ` : ""}
-    </tr>
-  `).join("");
+  tbody.innerHTML = filtered.map(eq => {
+    const rowClasses = [
+      getRowHighlightClass(eq.condition),
+      eq.id === highlightedEquipmentId ? "row-flash" : ""
+    ].filter(Boolean).join(" ");
+
+    return `
+      <tr class="${rowClasses}" data-eq-id="${escapeHtml(eq.id)}">
+        <td class="mono-text">${escapeHtml(eq.pcCode)}</td>
+        <td>${escapeHtml(eq.labId)}</td>
+        <td>${escapeHtml(eq.brand)} ${escapeHtml(eq.model)}</td>
+        <td class="mono-text">${escapeHtml(eq.serial)}</td>
+        <td>${escapeHtml(eq.location)}</td>
+        <td><span class="badge ${getConditionClass(eq.condition)}">${escapeHtml(eq.condition)}</span></td>
+        <td><span class="badge ${getStatusClass(eq.status)}">${escapeHtml(eq.status)}</span></td>
+        ${canEdit ? `
+          <td class="actions-cell">
+            <button type="button" class="button button-outline btn-sm" data-action="edit-eq" data-id="${escapeHtml(eq.id)}">Edit</button>
+            <button type="button" class="button button-outline btn-sm btn-danger-outline" data-action="del-eq" data-id="${escapeHtml(eq.id)}">Padam</button>
+          </td>
+        ` : ""}
+      </tr>
+    `;
+  }).join("");
 }
 
 function renderMaintenanceTable() {
@@ -284,36 +392,55 @@ function renderMaintenanceTable() {
   const canManage = currentPermissions.canManageMaintenance;
   const canDelete = currentPermissions.canDeleteMaintenance;
 
-  const filtered = maintenanceLogs.filter(log =>
-    log.logCode.toLowerCase().includes(query) ||
-    log.pcCode.toLowerCase().includes(query) ||
-    log.labId.toLowerCase().includes(query) ||
-    log.notes.toLowerCase().includes(query) ||
-    log.status.toLowerCase().includes(query)
-  );
+  const filtered = maintenanceLogs.filter(log => {
+    const matchesStatus = maintStatusFilter === "ALL" || log.status === maintStatusFilter;
+    const matchesType = maintTypeFilter === "ALL" || log.type === maintTypeFilter;
+    const matchesQuery =
+      !query ||
+      log.logCode.toLowerCase().includes(query) ||
+      log.pcCode.toLowerCase().includes(query) ||
+      log.labId.toLowerCase().includes(query) ||
+      log.notes.toLowerCase().includes(query) ||
+      log.status.toLowerCase().includes(query);
+    return matchesStatus && matchesType && matchesQuery;
+  });
+
+  filtered.sort((a, b) => {
+    const dir = maintSort.dir === "asc" ? 1 : -1;
+    return String(a[maintSort.key] || "").localeCompare(String(b[maintSort.key] || "")) * dir;
+  });
+
+  updateSortIndicators("maintenanceTable", maintSort);
 
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="${canManage ? 8 : 7}" class="empty-cell">Tiada rekod penyelenggaraan.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${canManage ? 8 : 7}" class="empty-cell">Tiada rekod penyelenggaraan sepadan.</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = filtered.map(log => `
-    <tr>
-      <td class="mono-text">${escapeHtml(log.logCode)}</td>
-      <td class="mono-text">${escapeHtml(log.pcCode)}</td>
-      <td>${escapeHtml(log.labId)}</td>
-      <td>${escapeHtml(log.type)}</td>
-      <td>${escapeHtml(log.date)}</td>
-      <td class="notes-cell">${escapeHtml(log.notes)}</td>
-      <td><span class="badge ${getStatusClass(log.status)}">${escapeHtml(log.status)}</span></td>
-      ${canManage ? `
-        <td class="actions-cell">
-          <button type="button" class="button button-outline btn-sm" data-action="edit-log" data-id="${escapeHtml(log.id)}">Kemaskini</button>
-          ${canDelete ? `<button type="button" class="button button-outline btn-sm btn-danger-outline" data-action="del-log" data-id="${escapeHtml(log.id)}">Padam</button>` : ""}
-        </td>
-      ` : ""}
-    </tr>
-  `).join("");
+  tbody.innerHTML = filtered.map(log => {
+    const rowClasses = [
+      log.status !== "Selesai" ? "row-warning" : "",
+      log.id === highlightedLogId ? "row-flash" : ""
+    ].filter(Boolean).join(" ");
+
+    return `
+      <tr class="${rowClasses}" data-log-id="${escapeHtml(log.id)}">
+        <td class="mono-text">${escapeHtml(log.logCode)}</td>
+        <td class="mono-text">${escapeHtml(log.pcCode)}</td>
+        <td>${escapeHtml(log.labId)}</td>
+        <td>${escapeHtml(log.type)}</td>
+        <td>${escapeHtml(log.date)}</td>
+        <td class="notes-cell">${escapeHtml(log.notes)}</td>
+        <td><span class="badge ${getStatusClass(log.status)}">${escapeHtml(log.status)}</span></td>
+        ${canManage ? `
+          <td class="actions-cell">
+            <button type="button" class="button button-outline btn-sm" data-action="edit-log" data-id="${escapeHtml(log.id)}">Kemaskini</button>
+            ${canDelete ? `<button type="button" class="button button-outline btn-sm btn-danger-outline" data-action="del-log" data-id="${escapeHtml(log.id)}">Padam</button>` : ""}
+          </td>
+        ` : ""}
+      </tr>
+    `;
+  }).join("");
 }
 
 function populatePredictionDropdown() {
@@ -382,6 +509,20 @@ function runPredictionAnalysis() {
   }
 }
 
+function renderReportPreview() {
+  if (!currentPermissions.sections.includes("laporan")) return;
+  const container = document.getElementById("printArea");
+  const { labs, equipment, maintenanceLogs } = getScopedData();
+  renderOfficialReport({
+    container,
+    selectedLabId,
+    labs,
+    equipment,
+    maintenanceLogs,
+    profile: currentProfile
+  });
+}
+
 function renderSettingsSection() {
   if (!currentPermissions.canManageSettings) return;
   const { labs, brands, users } = getState();
@@ -396,7 +537,10 @@ function renderSettingsSection() {
             <strong>${escapeHtml(l.name)}</strong> <span class="mono-text">(${escapeHtml(l.id)})</span>
             <small>${escapeHtml(l.rowsConfig.join(", "))} · ${l.seatsPerRow} meja/baris</small>
           </div>
-          <button type="button" class="button button-outline btn-sm btn-danger-outline" data-action="del-lab" data-id="${escapeHtml(l.id)}">Padam</button>
+          <div class="actions-cell">
+            <button type="button" class="button button-outline btn-sm" data-action="edit-lab" data-id="${escapeHtml(l.id)}">Edit</button>
+            <button type="button" class="button button-outline btn-sm btn-danger-outline" data-action="del-lab" data-id="${escapeHtml(l.id)}">Padam</button>
+          </div>
         </div>
       `).join("");
   }
@@ -411,7 +555,10 @@ function renderSettingsSection() {
             <strong>${escapeHtml(b.name)}</strong>
             <small>${escapeHtml(b.models.join(", ") || "Tiada model")}</small>
           </div>
-          <button type="button" class="button button-outline btn-sm btn-danger-outline" data-action="del-brand" data-id="${escapeHtml(b.id)}">Padam</button>
+          <div class="actions-cell">
+            <button type="button" class="button button-outline btn-sm" data-action="edit-brand" data-id="${escapeHtml(b.id)}">Edit</button>
+            <button type="button" class="button button-outline btn-sm btn-danger-outline" data-action="del-brand" data-id="${escapeHtml(b.id)}">Padam</button>
+          </div>
         </div>
       `).join("");
   }
@@ -728,63 +875,13 @@ async function handleDeleteMaintenanceLog(id) {
   }
 }
 
-function initSimpleCommandPalette() {
-  const openBtn = document.getElementById("openSearchModalBtn");
-  const modal = document.getElementById("commandModal");
-  const input = document.getElementById("commandSearchInput");
-  const results = document.getElementById("commandResults");
-  if (!modal || !input || !results) return;
-
-  function renderCommands(q = "") {
-    const query = q.trim().toLowerCase();
-    const items = [];
-    document.querySelectorAll("#sidebarNav .nav-link").forEach(link => {
-      items.push({
-        label: link.querySelector("span")?.textContent.trim() || "",
-        hint: "Halaman",
-        run: () => showSection(link.dataset.section)
-      });
-    });
-
-    const filtered = query ? items.filter(i => i.label.toLowerCase().includes(query)) : items;
-    results.innerHTML = filtered.map((item, idx) => `
-      <button type="button" class="command-item" data-cmd-idx="${idx}">
-        <span>${escapeHtml(item.label)}</span>
-        <small>${escapeHtml(item.hint)}</small>
-      </button>
-    `).join("") || `<div class="empty-cell">Tiada fungsi dijumpai</div>`;
-
-    results.querySelectorAll(".command-item").forEach((btn, idx) => {
-      btn.addEventListener("click", () => {
-        modal.close();
-        filtered[idx].run();
-      });
-    });
-  }
-
-  function openPalette() {
-    input.value = "";
-    renderCommands("");
-    modal.showModal();
-    input.focus();
-  }
-
-  openBtn?.addEventListener("click", openPalette);
-  input.addEventListener("input", e => renderCommands(e.target.value));
-  document.addEventListener("keydown", e => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-      e.preventDefault();
-      modal.open ? modal.close() : openPalette();
-    }
-  });
-}
-
 function renderAll() {
   populateLabSwitcher();
   renderDashboard();
   renderEquipmentTable();
   renderMaintenanceTable();
   populatePredictionDropdown();
+  renderReportPreview();
   renderSettingsSection();
 }
 
@@ -792,6 +889,14 @@ function bindStaticListeners() {
   document.getElementById("toggleSidebarBtn")?.addEventListener("click", () => {
     document.getElementById("sidebar")?.classList.toggle("collapsed");
   });
+
+  document.getElementById("mobileMenuBtn")?.addEventListener("click", () => {
+    document.getElementById("sidebar")?.classList.add("mobile-open");
+    document.getElementById("sidebarBackdrop")?.classList.add("open");
+  });
+
+  document.getElementById("sidebarBackdrop")?.addEventListener("click", closeMobileSidebar);
+  document.getElementById("themeToggleBtn")?.addEventListener("click", toggleTheme);
 
   document.querySelectorAll("#sidebarNav .nav-link").forEach(link => {
     link.addEventListener("click", e => {
@@ -818,19 +923,88 @@ function bindStaticListeners() {
 
   document.getElementById("logoutBtn")?.addEventListener("click", logout);
 
-  document.getElementById("viewAllEquipmentBtn")?.addEventListener("click", () => showSection("peralatan"));
-  document.getElementById("alertActionBtn")?.addEventListener("click", () => showSection("peralatan"));
+  document.getElementById("viewAllEquipmentBtn")?.addEventListener("click", () => {
+    setEquipmentConditionPill("ALL");
+    renderEquipmentTable();
+    showSection("peralatan");
+  });
+
+  document.getElementById("alertActionBtn")?.addEventListener("click", e => {
+    const targetCond = e.currentTarget.dataset.targetCondition || "Rosak";
+    setEquipmentConditionPill(targetCond);
+    renderEquipmentTable();
+    showSection("peralatan");
+  });
+
+  document.getElementById("equipmentConditionPills")?.addEventListener("click", e => {
+    const pill = e.target.closest("button[data-condition]");
+    if (!pill) return;
+    setEquipmentConditionPill(pill.dataset.condition);
+    renderEquipmentTable();
+  });
 
   document.getElementById("searchEquipment")?.addEventListener("input", renderEquipmentTable);
+  document.getElementById("filterEqStatus")?.addEventListener("change", e => {
+    eqStatusFilter = e.target.value;
+    renderEquipmentTable();
+  });
+
+  document.querySelectorAll("#equipmentTable thead th[data-sort]").forEach(th => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.sort;
+      eqSort = eqSort.key === key
+        ? { key, dir: eqSort.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: "asc" };
+      renderEquipmentTable();
+    });
+  });
+
   document.getElementById("searchMaintenance")?.addEventListener("input", renderMaintenanceTable);
+  document.getElementById("filterMaintStatus")?.addEventListener("change", e => {
+    maintStatusFilter = e.target.value;
+    renderMaintenanceTable();
+  });
+  document.getElementById("filterMaintType")?.addEventListener("change", e => {
+    maintTypeFilter = e.target.value;
+    renderMaintenanceTable();
+  });
+
+  document.querySelectorAll("#maintenanceTable thead th[data-sort]").forEach(th => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.sort;
+      maintSort = maintSort.key === key
+        ? { key, dir: maintSort.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: "asc" };
+      renderMaintenanceTable();
+    });
+  });
+
   document.getElementById("selectPcPrediction")?.addEventListener("change", runPredictionAnalysis);
-  document.getElementById("printReportBtn")?.addEventListener("click", () => window.print());
+
+  document.getElementById("printReportBtn")?.addEventListener("click", () => {
+    const { labs, equipment, maintenanceLogs } = getScopedData();
+    triggerOfficialPrint({
+      container: document.getElementById("printArea"),
+      selectedLabId,
+      labs,
+      equipment,
+      maintenanceLogs,
+      profile: currentProfile
+    });
+  });
 
   document.getElementById("addEquipmentBtn")?.addEventListener("click", openAddEquipmentModal);
   document.getElementById("cancelEquipmentBtn")?.addEventListener("click", () => document.getElementById("equipmentModal").close());
   document.getElementById("equipmentForm")?.addEventListener("submit", handleEquipmentSubmit);
   document.getElementById("eqLab")?.addEventListener("change", () => updateLabLocationDropdowns());
   document.getElementById("eqBrand")?.addEventListener("change", () => updateBrandModelDropdown());
+  document.getElementById("eqCondition")?.addEventListener("change", e => {
+    const statusSelect = document.getElementById("eqStatus");
+    if (!statusSelect) return;
+    if (e.target.value === "Rosak") statusSelect.value = "Penyelenggaraan";
+    else if (e.target.value === "Perlu diperiksa") statusSelect.value = "Perlu perhatian";
+    else statusSelect.value = "Aktif";
+  });
 
   document.getElementById("addMaintenanceBtn")?.addEventListener("click", openAddMaintenanceModal);
   document.getElementById("cancelMaintenanceBtn")?.addEventListener("click", () => document.getElementById("maintenanceModal").close());
@@ -864,6 +1038,13 @@ function bindStaticListeners() {
     confirmResolver = null;
   });
 
+  document.getElementById("settingsTabs")?.addEventListener("click", e => {
+    const tabBtn = e.target.closest("button[data-tab]");
+    if (!tabBtn) return;
+    document.querySelectorAll("#settingsTabs .settings-tab").forEach(b => b.classList.toggle("active", b === tabBtn));
+    document.querySelectorAll(".settings-tab-panel").forEach(p => p.classList.toggle("active", p.id === tabBtn.dataset.tab));
+  });
+
   document.getElementById("initDefaultSetupBtn")?.addEventListener("click", async () => {
     try {
       const res = await initDefaultLabsAndBrands();
@@ -883,6 +1064,8 @@ function bindStaticListeners() {
     try {
       await saveLab({ id, name, rowsConfig, seatsPerRow });
       e.currentTarget.reset();
+      document.getElementById("labRowsInput").value = "Baris A, Baris B, Baris C";
+      document.getElementById("labSeatsInput").value = "10";
       renderAll();
       showToast(`Makmal ${name} berjaya disimpan.`, "success");
     } catch (err) {
@@ -892,11 +1075,14 @@ function bindStaticListeners() {
 
   document.getElementById("brandForm")?.addEventListener("submit", async e => {
     e.preventDefault();
+    const id = document.getElementById("brandEditId").value || undefined;
     const name = document.getElementById("brandNameInput").value.trim();
     const models = document.getElementById("brandModelsInput").value.split(",").map(s => s.trim()).filter(Boolean);
     try {
-      await saveBrand({ name, models });
+      await saveBrand({ id, name, models });
       e.currentTarget.reset();
+      document.getElementById("brandEditId").value = "";
+      document.getElementById("resetBrandFormBtn").hidden = true;
       renderAll();
       showToast(`Jenama ${name} berjaya disimpan.`, "success");
     } catch (err) {
@@ -904,27 +1090,69 @@ function bindStaticListeners() {
     }
   });
 
+  document.getElementById("resetBrandFormBtn")?.addEventListener("click", () => {
+    document.getElementById("brandForm").reset();
+    document.getElementById("brandEditId").value = "";
+    document.getElementById("resetBrandFormBtn").hidden = true;
+  });
+
   document.getElementById("settingsLabsList")?.addEventListener("click", async e => {
-    const btn = e.target.closest("button[data-action='del-lab']");
+    const btn = e.target.closest("button[data-action]");
     if (!btn) return;
-    try {
-      await deleteLab(btn.dataset.id);
-      renderAll();
-      showToast("Makmal berjaya dipadam.", "success");
-    } catch (err) {
-      showToast(err.message || "Gagal memadam makmal.", "error");
+    if (btn.dataset.action === "edit-lab") {
+      const lab = getState().labs.find(l => l.id === btn.dataset.id);
+      if (!lab) return;
+      document.getElementById("labIdInput").value = lab.id;
+      document.getElementById("labNameInput").value = lab.name;
+      document.getElementById("labRowsInput").value = lab.rowsConfig.join(", ");
+      document.getElementById("labSeatsInput").value = String(lab.seatsPerRow);
+      return;
+    }
+    if (btn.dataset.action === "del-lab") {
+      const ok = await openConfirmDialog({
+        title: "Padam Makmal",
+        message: `Adakah anda pasti mahu memadam makmal ${btn.dataset.id}?`,
+        confirmLabel: "Padam",
+        danger: true
+      });
+      if (!ok) return;
+      try {
+        await deleteLab(btn.dataset.id);
+        renderAll();
+        showToast("Makmal berjaya dipadam.", "success");
+      } catch (err) {
+        showToast(err.message || "Gagal memadam makmal.", "error");
+      }
     }
   });
 
   document.getElementById("settingsBrandsList")?.addEventListener("click", async e => {
-    const btn = e.target.closest("button[data-action='del-brand']");
+    const btn = e.target.closest("button[data-action]");
     if (!btn) return;
-    try {
-      await deleteBrand(btn.dataset.id);
-      renderAll();
-      showToast("Jenama berjaya dipadam.", "success");
-    } catch (err) {
-      showToast(err.message || "Gagal memadam jenama.", "error");
+    if (btn.dataset.action === "edit-brand") {
+      const brand = getState().brands.find(b => b.id === btn.dataset.id);
+      if (!brand) return;
+      document.getElementById("brandEditId").value = brand.id;
+      document.getElementById("brandNameInput").value = brand.name;
+      document.getElementById("brandModelsInput").value = brand.models.join(", ");
+      document.getElementById("resetBrandFormBtn").hidden = false;
+      return;
+    }
+    if (btn.dataset.action === "del-brand") {
+      const ok = await openConfirmDialog({
+        title: "Padam Jenama",
+        message: "Padam jenama ini daripada senarai pilihan?",
+        confirmLabel: "Padam",
+        danger: true
+      });
+      if (!ok) return;
+      try {
+        await deleteBrand(btn.dataset.id);
+        renderAll();
+        showToast("Jenama berjaya dipadam.", "success");
+      } catch (err) {
+        showToast(err.message || "Gagal memadam jenama.", "error");
+      }
     }
   });
 
@@ -952,10 +1180,70 @@ function bindStaticListeners() {
     });
   });
 
-  initSimpleCommandPalette();
+  initCommandPalette({
+    getContext: () => ({
+      ...getState(),
+      permissions: currentPermissions
+    }),
+    navigateSection: sectionId => showSection(sectionId),
+    openAddEquipment: () => openAddEquipmentModal(),
+    openAddMaintenance: () => openAddMaintenanceModal(),
+    printReport: () => {
+      showSection("laporan");
+      const { labs, equipment, maintenanceLogs } = getScopedData();
+      triggerOfficialPrint({
+        container: document.getElementById("printArea"),
+        selectedLabId,
+        labs,
+        equipment,
+        maintenanceLogs,
+        profile: currentProfile
+      });
+    },
+    toggleTheme: () => toggleTheme(),
+    switchLab: labId => {
+      selectedLabId = labId;
+      renderAll();
+    },
+    focusEquipment: eq => {
+      selectedLabId = eq.labId;
+      setEquipmentConditionPill("ALL");
+      eqStatusFilter = "ALL";
+      const statusEl = document.getElementById("filterEqStatus");
+      if (statusEl) statusEl.value = "ALL";
+      const searchEl = document.getElementById("searchEquipment");
+      if (searchEl) searchEl.value = eq.pcCode;
+      highlightedEquipmentId = eq.id;
+      renderAll();
+      showSection("peralatan");
+      setTimeout(() => {
+        highlightedEquipmentId = null;
+        document.querySelector(`tr[data-eq-id="${CSS.escape(eq.id)}"]`)?.classList.remove("row-flash");
+      }, 2500);
+    },
+    focusMaintenanceLog: log => {
+      selectedLabId = log.labId;
+      maintStatusFilter = "ALL";
+      maintTypeFilter = "ALL";
+      const sEl = document.getElementById("filterMaintStatus");
+      const tEl = document.getElementById("filterMaintType");
+      if (sEl) sEl.value = "ALL";
+      if (tEl) tEl.value = "ALL";
+      const searchEl = document.getElementById("searchMaintenance");
+      if (searchEl) searchEl.value = log.logCode;
+      highlightedLogId = log.id;
+      renderAll();
+      showSection("penyelenggaraan");
+      setTimeout(() => {
+        highlightedLogId = null;
+        document.querySelector(`tr[data-log-id="${CSS.escape(log.id)}"]`)?.classList.remove("row-flash");
+      }, 2500);
+    }
+  });
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || "light");
   bindStaticListeners();
 
   onDashboardAuth(async (user, profile) => {
